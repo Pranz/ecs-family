@@ -33,5 +33,5 @@ main = flip execStateT initWorld $ do
   ent1 <- createEntity [(Printer,Print)]
   ent2 <- createEntity [(Printer,Print), (HasString, Str "this is an individual message")]
   runSystem
-  addComponent HasString inst $ Str "Whee now I have my own string too!"
+  addComponent HasString ent1 $ Str "Whee now I have my own string too!"
   runSystem

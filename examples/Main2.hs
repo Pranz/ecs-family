@@ -7,6 +7,7 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad (forever, when, void)
 import Data.Map
 import Data.Ecs
+import System.IO
 
 -- You must specify the components of your system. The components are just
 -- identifiers and shouldn't carry any data. To use all functions of the
@@ -18,6 +19,7 @@ data Component = Player | Printer
 instance System Component IO where
     -- This is the actual data for the components.
     data ComponentData Component = Str String | PlayerData Int
+    data AdditionalState Component = NoState
     
     -- The system is just a function which takes a component, the
     -- corresponding componentdata and the instance and provide a
@@ -31,9 +33,12 @@ instance System Component IO where
         't' -> when (gold > 0) $ do
           modifyComponentOf Player inst (\(PlayerData g) -> PlayerData $ g - 1)
           void $ createEntity [(Printer, Str "There is a piece of gold on the ground")]
+        'q' -> lift exitSuccess
         _   -> return ()
 
-main = flip execStateT initWorld $ do
+main = flip execStateT (initWorld NoState) $ do
+  lift $ hSetBuffering stdin NoBuffering
   player <- createEntity [(Player,PlayerData 0)]
   forever $ do
     runSystem
+    lift . putStrLn $ "===="

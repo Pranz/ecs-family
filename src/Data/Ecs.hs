@@ -5,27 +5,31 @@ import Data.Map
 import Data.Foldable (forM_)
 import Data.Traversable (forM)
 import Control.Monad.Trans.State
+import Control.Applicative (liftA2)
 
 newtype Instance = Instance {getId :: Int}
                    deriving(Eq, Show, Read, Ord)
 
-data World c cd = World
+data World c cd s = World
     { components :: Map c (Map Instance cd)
     , instances  :: [Instance]
     , idCounter  :: Int
+    , additionalState :: s
     }
 
-type World' c = World c (ComponentData c)
+type World' c = World c (ComponentData c) (AdditionalState c)
 
 -- Define a system over components c
 --
--- c should just be a set of identifiers, for example 
+-- c should just be a set of identifiers, for example
 -- c = Velocity | Position
 class (Monad m) =>  System c m | c -> m where
     -- This is the accompanied data for a component. if c is the above,
     -- an appropriate definition for ComponentData would be
     -- data ComponentData c = Vel Float Float | Pos Float Float
     data ComponentData c
+
+    data AdditionalState c
     -- The entire system of the world is a function
     -- system Velocity (Vel x y) inst = do
     --   modifyComponentOf Position inst (\(Pos xx yy) -> Pos (x + xx) (y
@@ -33,21 +37,21 @@ class (Monad m) =>  System c m | c -> m where
     system    :: c -> ComponentData c -> Instance -> StateT (World' c) m ()
 
     -- initialize the world
-    initWorld :: (Enum c, Ord c, Bounded c) => World' c
+    initWorld :: (Enum c, Ord c, Bounded c) => AdditionalState c -> World' c
     initWorld = World (fromList (fmap (,fromList []) [minBound..maxBound])) [] 0
 
 -- get a new unique ID
-getNewId :: (Monad m) =>  StateT (World' c) m Int
+getNewId :: (Monad m) => StateT (World' c) m Int
 getNewId = do
     id' <- fmap idCounter get
     modify (\w -> w {idCounter = idCounter w + 1})
     return id'
 
 getComponentData :: (Monad m, Ord c) => c -> Instance -> StateT (World' c) m (ComponentData c)
-getComponentData component inst = fmap ((! inst).(! component).components) get
+getComponentData component inst = fmap ((! inst) . (! component) . components) get
 
 mgetComponentData :: (Monad m, Ord c) => c -> Instance -> StateT (World' c) m (Maybe (ComponentData c))
-mgetComponentData component inst = fmap ((lookup inst).(! component).components) get
+mgetComponentData component inst = fmap (lookup inst . (! component) . components) get
 
 getComponentDataList :: (Monad m, Ord c) => c -> StateT (World' c) m [(Instance, ComponentData c)]
 getComponentDataList component = fmap (toList . (! component) . components) get
@@ -73,7 +77,7 @@ modifyComponents component f = do
     modify (\w -> w {components = insert component newCompMap (components w) })
 
 
--- creates a new instance with a unique ID. 
+-- creates a new instance with a unique ID.
 createEntity :: (Monad m, Ord c) => [(c, ComponentData c)] -> StateT (World' c) m Instance
 createEntity ls = do
     inst <- fmap Instance getNewId
@@ -82,7 +86,8 @@ createEntity ls = do
     return inst
 
 runSystem :: (Monad m, Ord c, Enum c, Bounded c, System c m) => StateT (World' c) m ()
-runSystem = do
-    forM_ (fmap (\c -> getComponentDataList c >>= return . (c,)) $ [minBound..maxBound]) $ \ls -> do
+runSystem =
+    forM_ (fmap (liftA2 fmap (,) getComponentDataList) [minBound..maxBound])
+          $ \ls -> do
       (component, list) <- ls
       forM_ list $ \(inst, compData) -> system component compData inst

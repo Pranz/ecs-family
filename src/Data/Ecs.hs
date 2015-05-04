@@ -2,6 +2,7 @@ module Data.Ecs where
 
 import Prelude hiding (lookup)
 import Data.Map
+import qualified Data.List as L
 import Data.Foldable (forM_)
 import Data.Traversable (forM)
 import Control.Monad.Trans.State
@@ -76,6 +77,8 @@ modifyComponents component f = do
     let newCompMap = mapWithKey f (componentMap ! component)
     modify (\w -> w {components = insert component newCompMap (components w) })
 
+hasComponent :: (Monad m, Ord c) => c -> Instance -> StateT (World' c) m Bool
+hasComponent component inst = fmap (member inst . (! component) . components) get
 
 -- creates a new instance with a unique ID.
 createEntity :: (Monad m, Ord c) => [(c, ComponentData c)] -> StateT (World' c) m Instance
@@ -84,6 +87,10 @@ createEntity ls = do
     forM_ ls $ \(cmp, componentData) ->
       modify (\w -> w {components = adjust (insert inst componentData) cmp . components $ w})
     return inst
+
+deleteEntity :: (Monad m, Ord c) => Instance -> StateT (World' c) m ()
+deleteEntity inst = do
+    modify (\w -> w {components = fmap (delete inst) $ components w, instances = L.delete inst $ instances w})
 
 runSystem :: (Monad m, Ord c, Enum c, Bounded c, System c m) => StateT (World' c) m ()
 runSystem =

@@ -91,3 +91,10 @@ runSystem =
           $ \ls -> do
       (component, list) <- ls
       forM_ list $ \(inst, compData) -> system component compData inst
+
+getAdditionalState :: (Monad m) => StateT (World' c) m (AdditionalState c)
+getAdditionalState =
+    fmap additionalState get
+
+modifyAdditionalState :: (Monad m) => (AdditionalState c -> AdditionalState c) -> StateT (World' c) m ()
+modifyAdditionalState f = modify (\w -> w {additionalState = f (additionalState w)})
